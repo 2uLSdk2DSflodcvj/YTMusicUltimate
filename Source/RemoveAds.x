@@ -9,31 +9,64 @@ static BOOL removeAds(void) {
     return YTMU(@"YTMUltimateIsEnabled") && YTMU(@"noAds");
 }
 
-%hook YTAdsInnerTubeContextDecorator
-- (void)decorateContext:(id)arg1 {
-    if (!removeAds()) return %orig;
+// Ads are removed client-side only, by emptying the ad slots of the player response and by
+// not creating the ads playback coordinator (same approach as PoomSmart's YouTube X).
+//
+// Do NOT tamper with what the app sends to YouTube or with how a stream is described to the player:
+// - skipping YTAdsInnerTubeContextDecorator strips the ad context from every InnerTube request
+//   (including /player), which YouTube's servers now treat as an ad blocker / tampered client;
+// - forcing isDAIEnabledPlayback to YES tells the player that every track is a stream with
+//   server-stitched ads, which it is not;
+// - returning nil spam signals sends an invalid payload instead of an empty one.
+// Since late November 2026 this makes every track fail to load: the app shows
+// "song unavailable" and keeps skipping to the next track.
+
+%hook YTAdShieldUtils
++ (id)spamSignalsDictionary {
+    return removeAds() ? @{} : %orig;
+}
++ (id)spamSignalsDictionaryWithoutIDFA {
+    return removeAds() ? @{} : %orig;
+}
+- (id)spamSignalsDictionary {
+    return removeAds() ? @{} : %orig;
+}
+- (id)spamSignalsDictionaryWithoutIDFA {
+    return removeAds() ? @{} : %orig;
 }
 %end
 
 %hook YTDataUtils
++ (id)spamSignalsDictionary {
+    return removeAds() ? @{ @"ms": @"" } : %orig;
+}
++ (id)spamSignalsDictionaryWithoutIDFA {
+    return removeAds() ? @{} : %orig;
+}
 - (id)spamSignalsDictionary {
-    return removeAds() ? nil : %orig;
+    return removeAds() ? @{ @"ms": @"" } : %orig;
+}
+- (id)spamSignalsDictionaryWithoutIDFA {
+    return removeAds() ? @{} : %orig;
 }
 %end
 
-%hook YTAdShieldUtils
-- (id)spamSignalsDictionary {
-    return removeAds() ? nil : %orig;
+// These protobuf accessors are resolved dynamically, so they can't be hooked with %orig.
+// Only added when "Remove ads" is enabled at launch.
+%group EmptyAdSlots
+%hook YTIPlayerResponse
+%new(@@:)
+- (NSMutableArray *)playerAdsArray {
+    return [NSMutableArray array];
 }
-- (id)spamSignalsDictionaryWithoutIDFA {
-    return removeAds() ? nil : %orig;
+%new(@@:)
+- (NSMutableArray *)adSlotsArray {
+    return [NSMutableArray array];
 }
+%end
 %end
 
 %hook YTIPlayerResponse
-- (BOOL)isMonetized {
-    return removeAds() ? NO : %orig;
-}
 - (id)paidContentOverlayElementRendererOptions {
     return removeAds() ? nil : %orig;
 }
@@ -43,7 +76,31 @@ static BOOL removeAds(void) {
 - (id)adIntroRenderer {
     return removeAds() ? nil : %orig;
 }
-- (BOOL)isDAIEnabledPlayback {
-    return removeAds() ? YES : %orig;
+%end
+
+%hook YTLocalPlaybackController
+- (id)createAdsPlaybackCoordinator {
+    return removeAds() ? nil : %orig;
 }
 %end
+
+%hook MDXSession
+- (void)adPlaying:(id)ad {
+    if (!removeAds()) %orig;
+}
+%end
+
+%hook MDXSessionImpl
+- (void)adPlaying:(id)ad {
+    if (!removeAds()) %orig;
+}
+%end
+
+%ctor {
+    %init;
+    // Missing keys default to enabled (defaults are written by another %ctor that may run later).
+    NSDictionary *YTMUltimateDict = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"YTMUltimate"];
+    BOOL isEnabled = YTMUltimateDict[@"YTMUltimateIsEnabled"] ? [YTMUltimateDict[@"YTMUltimateIsEnabled"] boolValue] : YES;
+    BOOL noAds = YTMUltimateDict[@"noAds"] ? [YTMUltimateDict[@"noAds"] boolValue] : YES;
+    if (isEnabled && noAds) %init(EmptyAdSlots);
+}

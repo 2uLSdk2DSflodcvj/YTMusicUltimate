@@ -347,14 +347,12 @@ static BOOL YTMU(NSString *key) {
 }
 %end
 
+// Don't make the app believe it is an internal / unit-test build: in test mode Google's code
+// skips or stubs real client checks (attestation, integrity tokens), and YouTube's servers now
+// refuse to serve streams to such clients, so every track fails as "unavailable" and gets skipped.
 %hook YTCommonUtils
-- (BOOL)isInternallyDistributedBuild { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
++ (BOOL)isOfflineToDownloadsEnabled { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
 - (BOOL)isOfflineToDownloadsEnabled { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
-- (BOOL)isUnitOrFunctionalTesting { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
-- (BOOL)isEarlGreyV2FunctionalTesting { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
-- (BOOL)isUnitTesting { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
-- (BOOL)isFunctionalTesting { return YTMU(@"YTMUltimateIsEnabled") ?: %orig; }
-- (BOOL)isDistributedBuild { return YTMU(@"YTMUltimateIsEnabled") ? NO : %orig; }
 %end
 
 %hook YTMYPCGetOfflineUpsellEndpointCommandHandlerImpl
