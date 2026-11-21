@@ -17,39 +17,10 @@ static BOOL removeAds(void) {
 //   (including /player), which YouTube's servers now treat as an ad blocker / tampered client;
 // - forcing isDAIEnabledPlayback to YES tells the player that every track is a stream with
 //   server-stitched ads, which it is not;
-// - returning nil spam signals sends an invalid payload instead of an empty one.
+// - altering the spam signals (YTDataUtils / YTAdShieldUtils) changes the anti-abuse payload
+//   and doesn't hide any ad.
 // Since late November 2026 this makes every track fail to load: the app shows
 // "song unavailable" and keeps skipping to the next track.
-
-%hook YTAdShieldUtils
-+ (id)spamSignalsDictionary {
-    return removeAds() ? @{} : %orig;
-}
-+ (id)spamSignalsDictionaryWithoutIDFA {
-    return removeAds() ? @{} : %orig;
-}
-- (id)spamSignalsDictionary {
-    return removeAds() ? @{} : %orig;
-}
-- (id)spamSignalsDictionaryWithoutIDFA {
-    return removeAds() ? @{} : %orig;
-}
-%end
-
-%hook YTDataUtils
-+ (id)spamSignalsDictionary {
-    return removeAds() ? @{ @"ms": @"" } : %orig;
-}
-+ (id)spamSignalsDictionaryWithoutIDFA {
-    return removeAds() ? @{} : %orig;
-}
-- (id)spamSignalsDictionary {
-    return removeAds() ? @{ @"ms": @"" } : %orig;
-}
-- (id)spamSignalsDictionaryWithoutIDFA {
-    return removeAds() ? @{} : %orig;
-}
-%end
 
 // These protobuf accessors are resolved dynamically, so they can't be hooked with %orig.
 // Only added when "Remove ads" is enabled at launch.
